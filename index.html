@@ -1,0 +1,2219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEON PULSE // Capture The Flag Laser Tag</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Orbitron:wght@600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #050814;
+            font-family: 'Inter', sans-serif;
+            color: #f8fafc;
+        }
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background-color: #060a18;
+        }
+        .neon-text-cyan {
+            text-shadow: 0 0 10px rgba(34, 211, 238, 0.8), 0 0 24px rgba(34, 211, 238, 0.4);
+        }
+        .neon-text-pink {
+            text-shadow: 0 0 10px rgba(244, 63, 94, 0.8), 0 0 24px rgba(244, 63, 94, 0.4);
+        }
+        .neon-text-gold {
+            text-shadow: 0 0 12px rgba(250, 204, 21, 0.85), 0 0 26px rgba(250, 204, 21, 0.45);
+        }
+        .glass-panel {
+            background: rgba(10, 16, 36, 0.86);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+        }
+        .btn-glow {
+            transition: all 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .btn-glow:hover:not(:disabled) {
+            transform: translateY(-2px);
+            filter: brightness(1.12);
+        }
+        .btn-glow:active:not(:disabled) {
+            transform: translateY(1px) scale(0.98);
+        }
+        @keyframes pulseFast {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.65; }
+        }
+        .animate-pulse-fast {
+            animation: pulseFast 1.2s infinite;
+        }
+    </style>
+</head>
+<body class="relative w-full h-full overflow-hidden">
+
+    <!-- MAIN GAME CANVAS -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- TOP HUD OVERLAY -->
+    <div id="hudOverlay" class="hidden fixed top-0 left-0 right-0 z-20 pointer-events-none px-3 sm:px-6 pt-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between gap-2 max-w-7xl w-full mx-auto">
+            <!-- Player 1 Score & Status -->
+            <div class="glass-panel border border-cyan-500/40 rounded-2xl px-3.5 py-2 flex items-center gap-3 shadow-lg shadow-cyan-950/40">
+                <div class="w-3.5 h-3.5 rounded-full bg-cyan-400 shadow-[0_0_12px_#22d3ee]"></div>
+                <div>
+                    <div id="p1Label" class="text-[11px] sm:text-xs font-orbitron tracking-wider text-cyan-300 uppercase">PLAYER 1</div>
+                    <div id="p1Buffs" class="flex flex-wrap gap-1.5 text-[10px] font-bold text-slate-300 min-h-[14px]"></div>
+                </div>
+                <div id="p1ScoreDisplay" class="font-orbitron text-2xl sm:text-3xl font-black text-white neon-text-cyan ml-1">0</div>
+            </div>
+
+            <!-- Center Match Info & Flag Status -->
+            <div class="glass-panel border border-slate-700/70 rounded-2xl px-4 py-1.5 text-center shadow-lg flex flex-col items-center">
+                <div class="font-orbitron text-[10px] sm:text-xs tracking-widest text-amber-300 uppercase font-bold">CTF // FIRST TO 7</div>
+                <div id="flagStatusHud" class="text-xs sm:text-sm font-orbitron font-extrabold text-yellow-300 neon-text-gold mt-0.5">
+                    🚩 FLAG: CENTER SECTOR
+                </div>
+                <div id="modeBadge" class="text-[10px] font-semibold text-slate-300 mt-0.5">VS CPU</div>
+            </div>
+
+            <!-- Player 2 / Enemy Score & Status -->
+            <div class="glass-panel border border-rose-500/40 rounded-2xl px-3.5 py-2 flex items-center gap-3 shadow-lg shadow-rose-950/40">
+                <div id="p2ScoreDisplay" class="font-orbitron text-2xl sm:text-3xl font-black text-white neon-text-pink mr-1">0</div>
+                <div class="text-right">
+                    <div id="p2Label" class="text-[11px] sm:text-xs font-orbitron tracking-wider text-rose-300 uppercase">CPU</div>
+                    <div id="p2Buffs" class="flex flex-wrap justify-end gap-1.5 text-[10px] font-bold text-slate-300 min-h-[14px]"></div>
+                </div>
+                <div class="w-3.5 h-3.5 rounded-full bg-rose-500 shadow-[0_0_12px_#f43f5e]"></div>
+            </div>
+        </div>
+
+        <!-- Dynamic Event Banner / Toast -->
+        <div id="eventToast" class="hidden mx-auto glass-panel border border-amber-400/60 text-amber-200 px-4 py-1 rounded-full text-xs sm:text-sm font-orbitron tracking-wide shadow-md"></div>
+    </div>
+
+    <!-- BOTTOM CONTROLS HINT & MENU BUTTON -->
+    <div id="controlsBar" class="hidden fixed bottom-2.5 left-3 right-3 z-20 flex items-center justify-between pointer-events-none max-w-7xl mx-auto">
+        <div id="controlsHintText" class="glass-panel border border-slate-800/80 rounded-xl px-3 py-1.5 text-[11px] sm:text-xs text-slate-300">
+            P1: WASD Move • Mouse Aim & Click Fire • Capture the Center Flag to your Corner Base!
+        </div>
+        <button onclick="returnToMainMenu()" class="pointer-events-auto glass-panel hover:bg-slate-800/90 border border-slate-700 text-slate-200 rounded-xl px-3.5 py-1.5 text-xs font-orbitron tracking-wider transition">
+            MENU
+        </button>
+    </div>
+
+    <!-- MAIN START MENU OVERLAY -->
+    <div id="startMenu" class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div class="glass-panel border border-cyan-500/40 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl shadow-cyan-950/50 relative overflow-hidden">
+            <div class="absolute -top-24 -left-24 w-56 h-56 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none"></div>
+            <div class="absolute -bottom-24 -right-24 w-56 h-56 bg-rose-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div class="text-center mb-6">
+                <div class="inline-block px-3 py-1 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-300 font-orbitron text-[11px] tracking-widest uppercase mb-2">
+                    4X MEGA ARENA // CAPTURE THE FLAG + ARITHMETIC DUELS
+                </div>
+                <h1 class="font-orbitron text-3xl sm:text-5xl font-black tracking-tight text-white neon-text-cyan">
+                    NEON PULSE <span class="text-amber-400">CTF</span>
+                </h1>
+                <p class="text-slate-300 text-xs sm:text-sm mt-2 max-w-lg mx-auto">
+                    Seize the golden flag from the central sector and race it back to your corner base! Get tagged by a laser? You drop the flag on the spot and enter a multiplication, division, addition &amp; subtraction duel!
+                </p>
+            </div>
+
+            <!-- Mode Selector -->
+            <div class="mb-5">
+                <label class="block font-orbitron text-xs tracking-wider text-slate-400 uppercase mb-2">1. Select Battle Mode</label>
+                <div class="grid grid-cols-2 gap-3">
+                    <button id="btnModeCpu" onclick="selectGameMode('cpu')" class="btn-glow rounded-2xl p-3.5 border-2 border-cyan-400 bg-cyan-500/20 text-left">
+                        <div class="font-orbitron font-bold text-sm sm:text-base text-white">1P VS 2 CPUS</div>
+                        <div class="text-xs text-cyan-200/80 mt-0.5">WASD + Cursor Aim vs 2 Hunters</div>
+                    </button>
+                    <button id="btnModeLocal" onclick="selectGameMode('local')" class="btn-glow rounded-2xl p-3.5 border-2 border-slate-700 bg-slate-900/70 text-left">
+                        <div class="font-orbitron font-bold text-sm sm:text-base text-white">2P + 2 CPUS</div>
+                        <div class="text-xs text-slate-400 mt-0.5">Split-Screen Tank Controls</div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- CPU Difficulty Selector -->
+            <div id="difficultySection" class="mb-6">
+                <label class="block font-orbitron text-xs tracking-wider text-slate-400 uppercase mb-2">2. CPU Intelligence & Math Speed</label>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <button onclick="selectDifficulty('easy')" data-diff="easy" class="diff-btn btn-glow rounded-xl py-2.5 px-3 border border-slate-700 bg-slate-900/70 font-orbitron text-xs font-bold text-emerald-300">
+                        EASY
+                    </button>
+                    <button onclick="selectDifficulty('medium')" data-diff="medium" class="diff-btn btn-glow rounded-xl py-2.5 px-3 border-2 border-amber-400 bg-amber-500/20 font-orbitron text-xs font-bold text-amber-300">
+                        MEDIUM
+                    </button>
+                    <button onclick="selectDifficulty('hard')" data-diff="hard" class="diff-btn btn-glow rounded-xl py-2.5 px-3 border border-slate-700 bg-slate-900/70 font-orbitron text-xs font-bold text-orange-300">
+                        HARD
+                    </button>
+                    <button onclick="selectDifficulty('extreme')" data-diff="extreme" class="diff-btn btn-glow rounded-xl py-2.5 px-3 border border-slate-700 bg-slate-900/70 font-orbitron text-xs font-bold text-rose-400">
+                        EXTREME
+                    </button>
+                </div>
+            </div>
+
+            <!-- Rules & Controls Summary -->
+            <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 mb-6 text-xs text-slate-300 grid sm:grid-cols-2 gap-3">
+                <div>
+                    <div class="font-orbitron text-amber-300 font-bold mb-1">🚩 CAPTURE THE FLAG</div>
+                    <ul class="space-y-1 text-slate-300/90">
+                        <li>• Grab the <span class="text-yellow-300 font-semibold">Golden Flag</span> in the center</li>
+                        <li>• Bring it to your <span class="text-cyan-300 font-semibold">Corner Base</span> to score (+1)</li>
+                        <li>• Hit while holding it? <span class="text-rose-300 font-semibold">You drop it there!</span></li>
+                    </ul>
+                </div>
+                <div>
+                    <div class="font-orbitron text-cyan-300 font-bold mb-1">⚡ CONTROLS & POWERUPS</div>
+                    <ul class="space-y-1 text-slate-300/90">
+                        <li>• <span class="text-cyan-300 font-semibold">P1:</span> WASD + Mouse (or W/S + A/D + L-Shift in 2P)</li>
+                        <li>• <span class="text-rose-300 font-semibold">P2:</span> Up/Down + Left/Right + R-Shift</li>
+                        <li>• <span class="text-emerald-300 font-semibold">📡 Locator</span> reveals flag & enemies</li>
+                    </ul>
+                </div>
+            </div>
+
+            <button onclick="startNewMatch()" class="btn-glow w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-500 to-rose-500 font-orbitron text-base sm:text-lg font-black tracking-widest text-white shadow-lg shadow-cyan-500/30 uppercase">
+                ENTER CTF ARENA
+            </button>
+        </div>
+    </div>
+
+    <!-- FULL-SCREEN MATH DUEL OVERLAY (Triggers on player-vs-player or 1P laser hit) -->
+    <div id="mathDuelOverlay" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md">
+        <div class="glass-panel border-2 border-indigo-400/70 rounded-3xl max-w-4xl w-full p-5 sm:p-8 shadow-2xl relative overflow-hidden">
+            <div class="text-center mb-4">
+                <div id="duelTriggerBadge" class="inline-block px-3.5 py-1 rounded-full bg-amber-500/20 border border-amber-400/60 text-amber-300 font-orbitron text-xs font-bold tracking-wider uppercase mb-2 animate-pulse-fast">
+                    ⚡ LASER TAG HIT! MATH SHOWDOWN ⚡
+                </div>
+                <div id="duelDifficultyTag" class="text-xs font-orbitron text-indigo-300 tracking-widest uppercase">
+                    TIER 1 // FIRST CORRECT ANSWER SCORES THE POINT
+                </div>
+            </div>
+
+            <!-- Question Box -->
+            <div class="bg-slate-900/95 border border-indigo-500/40 rounded-2xl p-5 sm:p-6 text-center mb-6 shadow-inner">
+                <div id="mathQuestionText" class="font-orbitron text-xl sm:text-3xl font-black text-white leading-snug">
+                    What is 12 × 8?
+                </div>
+            </div>
+
+            <!-- Answer Panels -->
+            <div id="duelPanelsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                <!-- Player 1 Answer Pad -->
+                <div id="p1MathPanel" class="rounded-2xl border-2 border-cyan-500/50 bg-cyan-950/25 p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="font-orbitron text-xs sm:text-sm font-bold text-cyan-300">PLAYER 1</span>
+                        <span id="p1MathStatus" class="text-[11px] font-semibold text-cyan-200/80">Keys [1 - 4] or Click</span>
+                    </div>
+                    <div id="p1OptionsGrid" class="grid grid-cols-2 gap-2.5"></div>
+                </div>
+
+                <!-- Player 2 / CPU Answer Pad -->
+                <div id="p2MathPanel" class="rounded-2xl border-2 border-rose-500/50 bg-rose-950/25 p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <span id="p2MathTitle" class="font-orbitron text-xs sm:text-sm font-bold text-rose-300">PLAYER 2</span>
+                        <span id="p2MathStatus" class="text-[11px] font-semibold text-rose-200/80">Keys [7 - 0]</span>
+                    </div>
+                    <div id="p2OptionsGrid" class="grid grid-cols-2 gap-2.5"></div>
+                    <div id="cpuThinkingBox" class="hidden py-8 text-center">
+                        <div class="inline-block w-7 h-7 border-4 border-rose-400 border-t-transparent rounded-full animate-spin mb-2"></div>
+                        <div id="cpuThinkingText" class="font-orbitron text-xs text-rose-300 tracking-wider">CPU COMPUTING ANSWER...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Round Resolution Banner -->
+            <div id="duelResultBanner" class="hidden mt-5 rounded-2xl p-4 text-center border font-orbitron">
+                <div id="duelResultTitle" class="text-lg sm:text-2xl font-black">PLAYER 1 SCORES!</div>
+                <div id="duelResultExplanation" class="font-sans text-sm sm:text-base text-slate-200 mt-1"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SIDE-SPECIFIC SPLIT-SCREEN MATH DUEL OVERLAYS (2P hit by CPU while other roams free) -->
+    <div id="p1SideMathOverlay" class="hidden fixed top-0 left-0 bottom-0 w-1/2 z-40 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md border-r-2 border-cyan-400/60">
+        <div class="glass-panel border-2 border-cyan-400/80 rounded-2xl w-full max-w-md p-4 sm:p-5 shadow-2xl">
+            <div class="text-center mb-2">
+                <span class="inline-block px-3 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/60 text-amber-300 font-orbitron text-[11px] font-bold tracking-wider uppercase animate-pulse-fast">
+                    ⚡ P1 TAGGED BY CPU!
+                </span>
+            </div>
+            <div class="bg-slate-900/95 border border-cyan-500/40 rounded-xl p-3 text-center mb-3">
+                <div id="p1SideMathQuestion" class="font-orbitron text-lg sm:text-xl font-black text-white">What is 12 × 8?</div>
+            </div>
+            <div id="p1SideOptionsGrid" class="grid grid-cols-2 gap-2"></div>
+            <div class="mt-2.5 flex items-center justify-between text-xs font-bold">
+                <span id="p1SideStatus" class="text-cyan-300">Keys [1 - 4]</span>
+                <span id="p1SideCpuStatus" class="text-rose-400">CPU solving...</span>
+            </div>
+            <div id="p1SideResultBanner" class="hidden mt-3 rounded-xl p-2.5 text-center border font-orbitron text-xs">
+                <div id="p1SideResultTitle" class="font-black text-sm"></div>
+                <div id="p1SideResultExp" class="font-sans text-slate-200 mt-0.5"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="p2SideMathOverlay" class="hidden fixed top-0 right-0 bottom-0 w-1/2 z-40 flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md border-l-2 border-rose-400/60">
+        <div class="glass-panel border-2 border-rose-400/80 rounded-2xl w-full max-w-md p-4 sm:p-5 shadow-2xl">
+            <div class="text-center mb-2">
+                <span class="inline-block px-3 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/60 text-amber-300 font-orbitron text-[11px] font-bold tracking-wider uppercase animate-pulse-fast">
+                    ⚡ P2 TAGGED BY CPU!
+                </span>
+            </div>
+            <div class="bg-slate-900/95 border border-rose-500/40 rounded-xl p-3 text-center mb-3">
+                <div id="p2SideMathQuestion" class="font-orbitron text-lg sm:text-xl font-black text-white">What is 12 × 8?</div>
+            </div>
+            <div id="p2SideOptionsGrid" class="grid grid-cols-2 gap-2"></div>
+            <div class="mt-2.5 flex items-center justify-between text-xs font-bold">
+                <span id="p2SideStatus" class="text-rose-300">Keys [7 - 0]</span>
+                <span id="p2SideCpuStatus" class="text-amber-400">CPU solving...</span>
+            </div>
+            <div id="p2SideResultBanner" class="hidden mt-3 rounded-xl p-2.5 text-center border font-orbitron text-xs">
+                <div id="p2SideResultTitle" class="font-black text-sm"></div>
+                <div id="p2SideResultExp" class="font-sans text-slate-200 mt-0.5"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VICTORY / MATCH OVERLAY -->
+    <div id="victoryOverlay" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+        <div class="glass-panel border-2 border-cyan-400/60 rounded-3xl max-w-lg w-full p-6 sm:p-8 text-center shadow-2xl">
+            <div class="font-orbitron text-xs tracking-widest text-amber-300 uppercase mb-2">CTF MATCH COMPLETE</div>
+            <h2 id="winnerHeadline" class="font-orbitron text-3xl sm:text-5xl font-black text-white neon-text-cyan mb-2">
+                PLAYER 1 WINS!
+            </h2>
+            <p id="winnerSubtext" class="text-slate-300 text-sm mb-6">
+                Dominated the arena in Capture The Flag and Arithmetic Duels!
+            </p>
+            <div class="bg-slate-900/90 border border-slate-700 rounded-2xl p-4 mb-6 flex items-center justify-around font-orbitron">
+                <div>
+                    <div id="finalP1Name" class="text-xs text-cyan-300">PLAYER 1</div>
+                    <div id="finalP1Score" class="text-3xl font-black text-white mt-1">7</div>
+                </div>
+                <div class="text-slate-500 text-lg font-bold">VS</div>
+                <div>
+                    <div id="finalP2Name" class="text-xs text-rose-300">ENEMY</div>
+                    <div id="finalP2Score" class="text-3xl font-black text-white mt-1">4</div>
+                </div>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button onclick="startNewMatch()" class="btn-glow flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 font-orbitron text-sm font-bold text-white uppercase tracking-wider">
+                    PLAY AGAIN
+                </button>
+                <button onclick="returnToMainMenu()" class="btn-glow flex-1 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-600 font-orbitron text-sm font-bold text-slate-200 uppercase tracking-wider">
+                    CHANGE SETTINGS
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. WEB AUDIO SYNTHESIZER (No external URLs)
+        // ==========================================
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+            tone(freq, endFreq, duration, type = 'sine', vol = 0.12) {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, now);
+                    if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, now + duration);
+                    gain.gain.setValueAtTime(vol, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + duration);
+                } catch (e) {}
+            }
+            playLaser(isP1) {
+                this.tone(isP1 ? 920 : 760, isP1 ? 210 : 170, 0.13, 'sawtooth', 0.08);
+            }
+            playPowerup() {
+                this.tone(440, 880, 0.18, 'triangle', 0.13);
+                setTimeout(() => this.tone(660, 1180, 0.2, 'sine', 0.12), 80);
+            }
+            playFlagPickup() {
+                this.tone(523, 784, 0.14, 'triangle', 0.14);
+                setTimeout(() => this.tone(784, 1046, 0.22, 'triangle', 0.14), 100);
+            }
+            playFlagDrop() {
+                this.tone(440, 160, 0.26, 'sawtooth', 0.14);
+            }
+            playHitAlert() {
+                this.tone(300, 620, 0.18, 'square', 0.12);
+                setTimeout(() => this.tone(620, 380, 0.2, 'square', 0.12), 110);
+            }
+            playPointWin() {
+                this.tone(523.25, 659.25, 0.14, 'triangle', 0.15);
+                setTimeout(() => this.tone(659.25, 783.99, 0.14, 'triangle', 0.15), 110);
+                setTimeout(() => this.tone(783.99, 1046.5, 0.28, 'triangle', 0.16), 220);
+            }
+            playWrong() {
+                this.tone(190, 110, 0.25, 'sawtooth', 0.13);
+            }
+        }
+        const sfx = new SoundEngine();
+
+        // ==========================================
+        // 2. ARITHMETIC DUEL GENERATOR (+, -, *, /)
+        // ==========================================
+        class MathDuelGenerator {
+            static generate(totalMatchPoints) {
+                const tier = totalMatchPoints <= 2 ? 1
+                    : totalMatchPoints <= 5 ? 2
+                    : totalMatchPoints <= 9 ? 3
+                    : 4;
+
+                const ops = ['add', 'sub', 'mul', 'div'];
+                const op = ops[Math.floor(Math.random() * ops.length)];
+                let question = '';
+                let answer = 0;
+                let explanation = '';
+
+                if (op === 'add') {
+                    const max = tier === 1 ? 50 : tier === 2 ? 120 : tier === 3 ? 250 : 500;
+                    const min = tier === 1 ? 12 : tier === 2 ? 25 : tier === 3 ? 65 : 125;
+                    const a = Math.floor(Math.random() * (max - min + 1)) + min;
+                    const b = Math.floor(Math.random() * (max - min + 1)) + min;
+                    answer = a + b;
+                    question = `${a} + ${b} = ?`;
+                    explanation = `${a} + ${b} = ${answer}`;
+                } else if (op === 'sub') {
+                    const max = tier === 1 ? 65 : tier === 2 ? 150 : tier === 3 ? 320 : 600;
+                    const min = tier === 1 ? 10 : tier === 2 ? 22 : tier === 3 ? 45 : 95;
+                    const b = Math.floor(Math.random() * (max * 0.6)) + min;
+                    const a = b + Math.floor(Math.random() * (max * 0.6)) + min;
+                    answer = a - b;
+                    question = `${a} − ${b} = ?`;
+                    explanation = `${a} − ${b} = ${answer}`;
+                } else if (op === 'mul') {
+                    const maxA = tier === 1 ? 10 : tier === 2 ? 12 : tier === 3 ? 16 : 24;
+                    const maxB = tier === 1 ? 10 : tier === 2 ? 12 : tier === 3 ? 15 : 18;
+                    const a = Math.floor(Math.random() * (maxA - 3 + 1)) + 3;
+                    const b = Math.floor(Math.random() * (maxB - 3 + 1)) + 3;
+                    answer = a * b;
+                    question = `${a} × ${b} = ?`;
+                    explanation = `${a} × ${b} = ${answer}`;
+                } else {
+                    const maxDiv = tier === 1 ? 9 : tier === 2 ? 12 : tier === 3 ? 15 : 18;
+                    const maxQuo = tier === 1 ? 10 : tier === 2 ? 14 : tier === 3 ? 18 : 24;
+                    const divisor = Math.floor(Math.random() * (maxDiv - 3 + 1)) + 3;
+                    const quotient = Math.floor(Math.random() * (maxQuo - 3 + 1)) + 3;
+                    const dividend = divisor * quotient;
+                    answer = quotient;
+                    question = `${dividend} ÷ ${divisor} = ?`;
+                    explanation = `${dividend} ÷ ${divisor} = ${answer}`;
+                }
+
+                const distractors = new Set();
+                const deltas = [-12, -10, -6, -4, -2, -1, 1, 2, 4, 6, 10, 12];
+                let guard = 0;
+                while (distractors.size < 3 && guard < 60) {
+                    guard++;
+                    const delta = deltas[Math.floor(Math.random() * deltas.length)];
+                    const cand = answer + delta;
+                    if (cand > 0 && cand !== answer) {
+                        distractors.add(cand);
+                    }
+                }
+                while (distractors.size < 3) {
+                    distractors.add(answer + distractors.size + 3);
+                }
+
+                const options = [answer, ...Array.from(distractors)];
+                for (let i = options.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [options[i], options[j]] = [options[j], options[i]];
+                }
+
+                return {
+                    tier,
+                    question,
+                    options,
+                    correctIndex: options.indexOf(answer),
+                    explanation
+                };
+            }
+        }
+
+        // ==========================================
+        // 3. 4X MEGA ARENA & CTF CONSTANTS
+        // ==========================================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let viewW = window.innerWidth;
+        let viewH = window.innerHeight;
+        function resizeCanvas() {
+            viewW = window.innerWidth;
+            viewH = window.innerHeight;
+            canvas.width = viewW;
+            canvas.height = viewH;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const WORLD_W = 4800;
+        const WORLD_H = 3600;
+        const WIN_SCORE = 7;
+
+        const CORNER_BASES = [
+            { id: 'NW', name: 'NW BASE', x: 320, y: 320, radius: 95, color: '#22d3ee' },
+            { id: 'SE', name: 'SE BASE', x: WORLD_W - 320, y: WORLD_H - 320, radius: 95, color: '#f43f5e' },
+            { id: 'NE', name: 'NE BASE', x: WORLD_W - 320, y: 320, radius: 95, color: '#fb923c' },
+            { id: 'SW', name: 'SW BASE', x: 320, y: WORLD_H - 320, radius: 95, color: '#a855f7' }
+        ];
+
+        const ARENA_WALLS = [
+            // Outer Arena Perimeter
+            { x: 0, y: 0, w: WORLD_W, h: 40 },
+            { x: 0, y: WORLD_H - 40, w: WORLD_W, h: 40 },
+            { x: 0, y: 0, w: 40, h: WORLD_H },
+            { x: WORLD_W - 40, y: 0, w: 40, h: WORLD_H },
+
+            // Corner Base Cover Baffles
+            { x: 620, y: 240, w: 48, h: 320 },
+            { x: 240, y: 620, w: 320, h: 48 },
+
+            { x: WORLD_W - 668, y: 240, w: 48, h: 320 },
+            { x: WORLD_W - 560, y: 620, w: 320, h: 48 },
+
+            { x: 620, y: WORLD_H - 560, w: 48, h: 320 },
+            { x: 240, y: WORLD_H - 668, w: 320, h: 48 },
+
+            { x: WORLD_W - 668, y: WORLD_H - 560, w: 48, h: 320 },
+            { x: WORLD_W - 560, y: WORLD_H - 668, w: 320, h: 48 },
+
+            // Quadrant Tactical Fortresses
+            { x: 1180, y: 820, w: 340, h: 52 },
+            { x: 1180, y: 820, w: 52, h: 300 },
+
+            { x: WORLD_W - 1520, y: 820, w: 340, h: 52 },
+            { x: WORLD_W - 1232, y: 820, w: 52, h: 300 },
+
+            { x: 1180, y: WORLD_H - 872, w: 340, h: 52 },
+            { x: 1180, y: WORLD_H - 1120, w: 52, h: 300 },
+
+            { x: WORLD_W - 1520, y: WORLD_H - 872, w: 340, h: 52 },
+            { x: WORLD_W - 1232, y: WORLD_H - 1120, w: 52, h: 300 },
+
+            // Mid-Lane Flank Dividers
+            { x: WORLD_W / 2 - 44, y: 360, w: 88, h: 460 },
+            { x: WORLD_W / 2 - 44, y: WORLD_H - 820, w: 88, h: 460 },
+            { x: 420, y: WORLD_H / 2 - 44, w: 480, h: 88 },
+            { x: WORLD_W - 900, y: WORLD_H / 2 - 44, w: 480, h: 88 },
+
+            // Central Courtyard Pillars (Surrounding the Flag Spawn Ring)
+            { x: WORLD_W / 2 - 470, y: WORLD_H / 2 - 470, w: 120, h: 120 },
+            { x: WORLD_W / 2 + 350, y: WORLD_H / 2 - 470, w: 120, h: 120 },
+            { x: WORLD_W / 2 - 470, y: WORLD_H / 2 + 350, w: 120, h: 120 },
+            { x: WORLD_W / 2 + 350, y: WORLD_H / 2 + 350, w: 120, h: 120 }
+        ];
+
+        const CPU_CONFIGS = {
+            easy: {
+                label: 'EASY',
+                speedMult: 0.72,
+                aimSpread: 0.56,
+                reactionDelay: 0.72,
+                fireCooldown: 0.95,
+                mathMinTime: 5.5,
+                mathMaxTime: 8.5,
+                mathAccuracy: 0.65
+            },
+            medium: {
+                label: 'MEDIUM',
+                speedMult: 0.88,
+                aimSpread: 0.42,
+                reactionDelay: 0.48,
+                fireCooldown: 0.68,
+                mathMinTime: 3.8,
+                mathMaxTime: 6.2,
+                mathAccuracy: 0.80
+            },
+            hard: {
+                label: 'HARD',
+                speedMult: 1.02,
+                aimSpread: 0.30,
+                reactionDelay: 0.32,
+                fireCooldown: 0.50,
+                mathMinTime: 2.5,
+                mathMaxTime: 4.5,
+                mathAccuracy: 0.90
+            },
+            extreme: {
+                label: 'EXTREME',
+                speedMult: 1.15,
+                aimSpread: 0.22,
+                reactionDelay: 0.20,
+                fireCooldown: 0.38,
+                mathMinTime: 1.7,
+                mathMaxTime: 3.1,
+                mathAccuracy: 0.97
+            }
+        };
+
+        // ==========================================
+        // 4. GAME STATE & INPUT HANDLERS
+        // ==========================================
+        const gameState = {
+            phase: 'MENU',
+            mode: 'cpu',
+            difficulty: 'medium',
+            players: [],
+            lasers: [],
+            powerups: [],
+            particles: [],
+            flag: {
+                x: WORLD_W / 2,
+                y: WORLD_H / 2,
+                carrierId: null,
+                pulse: 0
+            },
+            sharedCam: { x: WORLD_W / 2, y: WORLD_H / 2 },
+            isSplitScreen: false,
+            powerupSpawnTimer: 2.5,
+            duel: null,
+            sideDuels: { 1: null, 2: null },
+            lastTime: 0
+        };
+
+        const keys = {};
+        const mouse = { x: viewW / 2, y: viewH / 2, down: false };
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) && gameState.phase === 'PLAYING') {
+                e.preventDefault();
+            }
+            if (gameState.phase === 'MATH_DUEL') {
+                handleDuelKeyInput(e.code);
+            } else if (gameState.phase === 'PLAYING') {
+                const p1Map = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 };
+                const p2Map = { Digit7: 0, Digit8: 1, Digit9: 2, Digit0: 3 };
+                if (gameState.sideDuels[1] && (e.code in p1Map)) {
+                    submitSideDuelAnswer(1, p1Map[e.code]);
+                }
+                if (gameState.sideDuels[2] && (e.code in p2Map)) {
+                    submitSideDuelAnswer(2, p2Map[e.code]);
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) {
+                sfx.init();
+                mouse.down = true;
+            }
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 0) mouse.down = false;
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            sfx.init();
+            if (e.touches.length > 0) {
+                const rect = canvas.getBoundingClientRect();
+                mouse.x = e.touches[0].clientX - rect.left;
+                mouse.y = e.touches[0].clientY - rect.top;
+                mouse.down = true;
+            }
+        }, { passive: true });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 0) {
+                const rect = canvas.getBoundingClientRect();
+                mouse.x = e.touches[0].clientX - rect.left;
+                mouse.y = e.touches[0].clientY - rect.top;
+            }
+        }, { passive: true });
+
+        canvas.addEventListener('touchend', () => {
+            mouse.down = false;
+        });
+
+        // ==========================================
+        // 5. MENU & MATCH INITIALIZATION
+        // ==========================================
+        function selectGameMode(mode) {
+            gameState.mode = mode;
+            const btnCpu = document.getElementById('btnModeCpu');
+            const btnLocal = document.getElementById('btnModeLocal');
+
+            if (mode === 'cpu') {
+                btnCpu.className = 'btn-glow rounded-2xl p-3.5 border-2 border-cyan-400 bg-cyan-500/20 text-left';
+                btnLocal.className = 'btn-glow rounded-2xl p-3.5 border-2 border-slate-700 bg-slate-900/70 text-left';
+            } else {
+                btnLocal.className = 'btn-glow rounded-2xl p-3.5 border-2 border-rose-400 bg-rose-500/20 text-left';
+                btnCpu.className = 'btn-glow rounded-2xl p-3.5 border-2 border-slate-700 bg-slate-900/70 text-left';
+            }
+        }
+
+        function selectDifficulty(diff) {
+            gameState.difficulty = diff;
+            document.querySelectorAll('.diff-btn').forEach(btn => {
+                const isSel = btn.dataset.diff === diff;
+                btn.classList.toggle('border-2', isSel);
+                btn.classList.toggle('border-amber-400', isSel);
+                btn.classList.toggle('bg-amber-500/20', isSel);
+                btn.classList.toggle('border-slate-700', !isSel);
+                btn.classList.toggle('bg-slate-900/70', !isSel);
+            });
+        }
+
+        function createPlayerEntity(id, name, color, glow, base, isCpu) {
+            return {
+                id,
+                name,
+                color,
+                glow,
+                isCpu,
+                x: base.x,
+                y: base.y,
+                baseX: base.x,
+                baseY: base.y,
+                baseName: base.name,
+                radius: 22,
+                angle: Math.atan2(WORLD_H / 2 - base.y, WORLD_W / 2 - base.x),
+                baseSpeed: 335,
+                score: 0,
+                fireTimer: 0,
+                invulnTimer: 1.0,
+                speedBoostTimer: 0,
+                rapidFireTimer: 0,
+                locatorTimer: 0,
+                camX: base.x,
+                camY: base.y,
+                aiState: {
+                    targetX: WORLD_W / 2,
+                    targetY: WORLD_H / 2,
+                    repathTimer: 0,
+                    sightTimer: 0,
+                    strafeDir: 1,
+                    strafeTimer: 1.0
+                }
+            };
+        }
+
+        function spawnFlagInCenter() {
+            gameState.flag.carrierId = null;
+            for (let attempt = 0; attempt < 60; attempt++) {
+                const ang = Math.random() * Math.PI * 2;
+                const dist = 40 + Math.random() * 260;
+                const fx = WORLD_W / 2 + Math.cos(ang) * dist;
+                const fy = WORLD_H / 2 + Math.sin(ang) * dist;
+                if (!circleHitsWall(fx, fy, 34)) {
+                    gameState.flag.x = fx;
+                    gameState.flag.y = fy;
+                    return;
+                }
+            }
+            gameState.flag.x = WORLD_W / 2;
+            gameState.flag.y = WORLD_H / 2;
+        }
+
+        function dropFlagAt(x, y) {
+            gameState.flag.carrierId = null;
+            gameState.flag.x = Math.max(90, Math.min(WORLD_W - 90, x));
+            gameState.flag.y = Math.max(90, Math.min(WORLD_H - 90, y));
+            sfx.playFlagDrop();
+            spawnParticles(gameState.flag.x, gameState.flag.y, '#facc15', 24, 240);
+            updateHUD();
+            showToast('⚠️ FLAG DROPPED ON THE FIELD!', 'border-amber-400/90');
+        }
+
+        function startNewMatch() {
+            sfx.init();
+            const isCpuMode = gameState.mode === 'cpu';
+
+            if (isCpuMode) {
+                gameState.players = [
+                    createPlayerEntity(1, 'PLAYER 1', '#22d3ee', 'rgba(34, 211, 238, 0.75)', CORNER_BASES[0], false),
+                    createPlayerEntity(2, 'ALPHA BOT', '#f43f5e', 'rgba(244, 63, 94, 0.75)', CORNER_BASES[1], true),
+                    createPlayerEntity(3, 'VIPER BOT', '#fb923c', 'rgba(251, 146, 60, 0.75)', CORNER_BASES[2], true)
+                ];
+            } else {
+                gameState.players = [
+                    createPlayerEntity(1, 'PLAYER 1', '#22d3ee', 'rgba(34, 211, 238, 0.75)', CORNER_BASES[0], false),
+                    createPlayerEntity(2, 'PLAYER 2', '#f43f5e', 'rgba(244, 63, 94, 0.75)', CORNER_BASES[1], false),
+                    createPlayerEntity(3, 'HUNTER-1', '#fb923c', 'rgba(251, 146, 60, 0.75)', CORNER_BASES[2], true),
+                    createPlayerEntity(4, 'HUNTER-2', '#a855f7', 'rgba(168, 85, 247, 0.75)', CORNER_BASES[3], true)
+                ];
+            }
+
+            gameState.lasers = [];
+            gameState.powerups = [];
+            gameState.particles = [];
+            gameState.duel = null;
+            gameState.sideDuels = { 1: null, 2: null };
+            gameState.phase = 'PLAYING';
+            gameState.isSplitScreen = !isCpuMode;
+            gameState.powerupSpawnTimer = 2.0;
+
+            spawnFlagInCenter();
+
+            for (let i = 0; i < 10; i++) {
+                spawnPowerup();
+            }
+
+            document.getElementById('startMenu').classList.add('hidden');
+            document.getElementById('victoryOverlay').classList.add('hidden');
+            document.getElementById('mathDuelOverlay').classList.add('hidden');
+            document.getElementById('p1SideMathOverlay').classList.add('hidden');
+            document.getElementById('p2SideMathOverlay').classList.add('hidden');
+            document.getElementById('hudOverlay').classList.remove('hidden');
+            document.getElementById('controlsBar').classList.remove('hidden');
+
+            document.getElementById('p1Label').textContent = 'PLAYER 1 (NW)';
+            document.getElementById('p2Label').textContent = isCpuMode ? '2 CPU HUNTERS' : 'PLAYER 2 (SE)';
+            document.getElementById('modeBadge').textContent = isCpuMode
+                ? `1P VS 2 CPUS (${CPU_CONFIGS[gameState.difficulty].label})`
+                : `2P + 2 CPUS (${CPU_CONFIGS[gameState.difficulty].label})`;
+            document.getElementById('controlsHintText').textContent = isCpuMode
+                ? 'P1: WASD Move • Mouse Aim & Click Fire • Capture the Center Flag to NW Base!'
+                : 'P1: W/S Thrust, A/D Turn, L-Shift Fire | P2: Up/Down Thrust, Left/Right Turn, R-Shift Fire';
+
+            updateHUD();
+            showToast('🚩 SEIZE THE GOLDEN FLAG FROM CENTER SECTOR!', 'border-yellow-400/90');
+        }
+
+        // ==========================================
+        // 6. COLLISIONS, SPAWNING & COMBAT HELPERS
+        // ==========================================
+        function circleHitsWall(cx, cy, radius) {
+            for (const w of ARENA_WALLS) {
+                const closestX = Math.max(w.x, Math.min(cx, w.x + w.w));
+                const closestY = Math.max(w.y, Math.min(cy, w.y + w.h));
+                if (Math.hypot(cx - closestX, cy - closestY) < radius) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function resolveWallCollisions(entity) {
+            for (const w of ARENA_WALLS) {
+                const closestX = Math.max(w.x, Math.min(entity.x, w.x + w.w));
+                const closestY = Math.max(w.y, Math.min(entity.y, w.y + w.h));
+                const dx = entity.x - closestX;
+                const dy = entity.y - closestY;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist < entity.radius) {
+                    if (dist > 0.0001) {
+                        const overlap = entity.radius - dist;
+                        entity.x += (dx / dist) * overlap;
+                        entity.y += (dy / dist) * overlap;
+                    } else {
+                        entity.x += entity.radius;
+                    }
+                }
+            }
+        }
+
+        function hasLineOfSight(x1, y1, x2, y2) {
+            const dist = Math.hypot(x2 - x1, y2 - y1);
+            const steps = Math.ceil(dist / 36);
+            for (let i = 1; i < steps; i++) {
+                const t = i / steps;
+                const px = x1 + (x2 - x1) * t;
+                const py = y1 + (y2 - y1) * t;
+                for (const w of ARENA_WALLS) {
+                    if (px >= w.x && px <= w.x + w.w && py >= w.y && py <= w.y + w.h) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        function spawnParticles(x, y, color, count = 14, speed = 220) {
+            for (let i = 0; i < count; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const spd = 40 + Math.random() * speed;
+                gameState.particles.push({
+                    x,
+                    y,
+                    vx: Math.cos(ang) * spd,
+                    vy: Math.sin(ang) * spd,
+                    life: 0.35 + Math.random() * 0.3,
+                    maxLife: 0.65,
+                    color,
+                    size: 2.5 + Math.random() * 3.5
+                });
+            }
+        }
+
+        function respawnPlayerRandomly(loser, winner) {
+            let chosenX = loser.baseX;
+            let chosenY = loser.baseY;
+
+            for (let attempt = 0; attempt < 90; attempt++) {
+                const candX = 160 + Math.random() * (WORLD_W - 320);
+                const candY = 160 + Math.random() * (WORLD_H - 320);
+
+                if (circleHitsWall(candX, candY, loser.radius + 18)) continue;
+                if (winner && Math.hypot(candX - winner.x, candY - winner.y) < 550) continue;
+                if (Math.hypot(candX - gameState.flag.x, candY - gameState.flag.y) < 420) continue;
+
+                chosenX = candX;
+                chosenY = candY;
+                break;
+            }
+
+            loser.x = chosenX;
+            loser.y = chosenY;
+            loser.camX = chosenX;
+            loser.camY = chosenY;
+            loser.invulnTimer = 2.0;
+            spawnParticles(chosenX, chosenY, '#ffffff', 24, 260);
+            spawnParticles(chosenX, chosenY, loser.color, 20, 220);
+        }
+
+        function spawnPowerup() {
+            if (gameState.powerups.length >= 12) return;
+            const types = ['speed', 'rapid', 'locator'];
+            const type = types[Math.floor(Math.random() * types.length)];
+
+            for (let attempt = 0; attempt < 50; attempt++) {
+                const px = 220 + Math.random() * (WORLD_W - 440);
+                const py = 220 + Math.random() * (WORLD_H - 440);
+                if (!circleHitsWall(px, py, 32)) {
+                    gameState.powerups.push({
+                        x: px,
+                        y: py,
+                        type,
+                        radius: 19,
+                        pulse: Math.random() * Math.PI * 2
+                    });
+                    break;
+                }
+            }
+        }
+
+        let toastTimeout = null;
+        function showToast(text, borderClass = 'border-amber-400/60') {
+            const el = document.getElementById('eventToast');
+            el.textContent = text;
+            el.className = `mx-auto glass-panel border ${borderClass} text-white px-4 py-1 rounded-full text-xs sm:text-sm font-orbitron tracking-wide shadow-md`;
+            el.classList.remove('hidden');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => el.classList.add('hidden'), 2600);
+        }
+
+        function updateHUD() {
+            const [p1, p2] = gameState.players;
+            if (!p1 || !p2) return;
+
+            document.getElementById('p1ScoreDisplay').textContent = p1.score;
+            if (gameState.mode === 'cpu') {
+                const cpuBest = Math.max(...gameState.players.filter(pl => pl.isCpu).map(pl => pl.score));
+                document.getElementById('p2ScoreDisplay').textContent = cpuBest;
+            } else {
+                document.getElementById('p2ScoreDisplay').textContent = p2.score;
+            }
+
+            const flagHud = document.getElementById('flagStatusHud');
+            if (gameState.flag.carrierId === null) {
+                flagHud.textContent = '🚩 FLAG: LOOSE ON FIELD';
+                flagHud.className = 'text-xs sm:text-sm font-orbitron font-extrabold text-yellow-300 neon-text-gold mt-0.5';
+            } else {
+                const carrier = gameState.players.find(pl => pl.id === gameState.flag.carrierId);
+                flagHud.textContent = `🚩 CARRIED BY ${carrier ? carrier.name : 'PLAYER'}`;
+                flagHud.className = carrier && carrier.id === 1
+                    ? 'text-xs sm:text-sm font-orbitron font-extrabold text-cyan-300 neon-text-cyan mt-0.5'
+                    : 'text-xs sm:text-sm font-orbitron font-extrabold text-rose-300 neon-text-pink mt-0.5';
+            }
+
+            const formatBuffs = (pl) => {
+                const list = [];
+                if (gameState.flag.carrierId === pl.id) list.push(`<span class="text-yellow-300">🚩 FLAG</span>`);
+                if (pl.speedBoostTimer > 0) list.push(`<span class="text-emerald-300">⚡${pl.speedBoostTimer.toFixed(1)}s</span>`);
+                if (pl.rapidFireTimer > 0) list.push(`<span class="text-amber-300">🔥${pl.rapidFireTimer.toFixed(1)}s</span>`);
+                if (pl.locatorTimer > 0) list.push(`<span class="text-teal-300">📡${pl.locatorTimer.toFixed(1)}s</span>`);
+                return list.join(' ');
+            };
+            document.getElementById('p1Buffs').innerHTML = formatBuffs(p1);
+            document.getElementById('p2Buffs').innerHTML = formatBuffs(p2);
+        }
+
+        function fireLaser(player) {
+            if (player.fireTimer > 0) return;
+            const cooldown = player.rapidFireTimer > 0 ? 0.17 : 0.36;
+            player.fireTimer = cooldown;
+
+            const muzzleDist = player.radius + 10;
+            const lx = player.x + Math.cos(player.angle) * muzzleDist;
+            const ly = player.y + Math.sin(player.angle) * muzzleDist;
+            const speed = 1020;
+
+            gameState.lasers.push({
+                ownerId: player.id,
+                x: lx,
+                y: ly,
+                vx: Math.cos(player.angle) * speed,
+                vy: Math.sin(player.angle) * speed,
+                color: player.color,
+                life: 1.4
+            });
+
+            sfx.playLaser(player.id === 1);
+            spawnParticles(lx, ly, player.color, 5, 110);
+        }
+
+        // ==========================================
+        // 7. MATH DUEL LOGIC (Triggered ONLY when hit by a laser)
+        // ==========================================
+        function triggerMathDuel(shooter, target) {
+            // If target was carrying the flag, they immediately drop it where they were hit!
+            if (gameState.flag.carrierId === target.id) {
+                dropFlagAt(target.x, target.y);
+            }
+
+            // If a human shoots a CPU bot, the human isn't hit — respawn the tagged CPU immediately!
+            if (target.isCpu) {
+                sfx.playHitAlert();
+                const humanRef = gameState.players.find(p => !p.isCpu) || shooter;
+                respawnPlayerRandomly(target, humanRef);
+                if (!shooter.isCpu) {
+                    showToast(`🎯 ${shooter.name} TAGGED ${target.name}!`, 'border-cyan-400/80');
+                }
+                return;
+            }
+
+            // In Local 2P mode, whenever a human player is hit (by CPU or by the other player),
+            // open the math problem ONLY on the hit player's half of the screen so the shooter stays free to roam!
+            if (gameState.mode === 'local' && (target.id === 1 || target.id === 2)) {
+                triggerSideMathDuel(target, shooter);
+                return;
+            }
+
+            // In 1P mode, Player 1 was hit by a CPU — open the arithmetic challenge for Player 1
+            gameState.phase = 'MATH_DUEL';
+            gameState.lasers = [];
+            sfx.playHitAlert();
+
+            const [p1, p2] = gameState.players;
+            const totalPts = p1.score + p2.score;
+            const qData = MathDuelGenerator.generate(totalPts);
+
+            const cfg = CPU_CONFIGS[gameState.difficulty];
+            const cpuDelay = cfg.mathMinTime + Math.random() * (cfg.mathMaxTime - cfg.mathMinTime);
+            const cpuCorrect = Math.random() < cfg.mathAccuracy;
+
+            gameState.duel = {
+                p1Entity: target,
+                p2Entity: shooter,
+                shooterId: shooter.id,
+                targetId: target.id,
+                qData,
+                resolved: false,
+                p1Lockout: 0,
+                p2Lockout: 0,
+                cpuTimer: 0,
+                cpuTargetDelay: cpuDelay,
+                cpuWillBeCorrect: cpuCorrect
+            };
+
+            document.getElementById('duelTriggerBadge').textContent = `⚡ YOU WERE HIT BY ${shooter.name}! SOLVE TO ESCAPE ⚡`;
+            document.getElementById('duelDifficultyTag').textContent = `TIER ${qData.tier} // SOLVE BEFORE ${shooter.name} TO AVOID RESPAWN`;
+            document.getElementById('mathQuestionText').textContent = qData.question;
+            document.getElementById('duelResultBanner').classList.add('hidden');
+
+            const p1Grid = document.getElementById('p1OptionsGrid');
+            p1Grid.innerHTML = '';
+            const p1Keys = ['1', '2', '3', '4'];
+            qData.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'btn-glow rounded-xl p-3 bg-slate-900/90 hover:bg-cyan-500/25 border border-cyan-500/50 text-white font-orbitron text-sm sm:text-base font-bold flex items-center justify-between';
+                btn.innerHTML = `<span class="text-xs px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">${p1Keys[idx]}</span><span>${opt}</span>`;
+                btn.onclick = () => submitDuelAnswer(1, idx);
+                p1Grid.appendChild(btn);
+            });
+            document.getElementById('p1MathStatus').textContent = 'Keys [1 - 4] or Click';
+
+            const p2Grid = document.getElementById('p2OptionsGrid');
+            const cpuBox = document.getElementById('cpuThinkingBox');
+            p2Grid.innerHTML = '';
+
+            if (gameState.mode === 'cpu') {
+                document.getElementById('p2MathTitle').textContent = `${shooter.name} (${cfg.label})`;
+                document.getElementById('p2MathStatus').textContent = 'Solving...';
+                p2Grid.classList.add('hidden');
+                cpuBox.classList.remove('hidden');
+                document.getElementById('cpuThinkingText').textContent = `${shooter.name} SOLVING EQUATION...`;
+            } else {
+                document.getElementById('p2MathTitle').textContent = 'PLAYER 2';
+                document.getElementById('p2MathStatus').textContent = 'Keys [7 - 0]';
+                cpuBox.classList.add('hidden');
+                p2Grid.classList.remove('hidden');
+                const p2Keys = ['7', '8', '9', '0'];
+                qData.options.forEach((opt, idx) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn-glow rounded-xl p-3 bg-slate-900/90 hover:bg-rose-500/25 border border-rose-500/50 text-white font-orbitron text-sm sm:text-base font-bold flex items-center justify-between';
+                    btn.innerHTML = `<span class="text-xs px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">${p2Keys[idx]}</span><span>${opt}</span>`;
+                    btn.onclick = () => submitDuelAnswer(2, idx);
+                    p2Grid.appendChild(btn);
+                });
+            }
+
+            document.getElementById('mathDuelOverlay').classList.remove('hidden');
+        }
+
+        function handleDuelKeyInput(code) {
+            const p1Map = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 };
+            const p2Map = { Digit7: 0, Digit8: 1, Digit9: 2, Digit0: 3 };
+            if (code in p1Map) submitDuelAnswer(1, p1Map[code]);
+            else if (gameState.mode === 'local' && (code in p2Map)) submitDuelAnswer(2, p2Map[code]);
+        }
+
+        function submitDuelAnswer(playerId, optionIdx, isCpuSubmit = false) {
+            const duel = gameState.duel;
+            if (!duel || duel.resolved) return;
+
+            if (!isCpuSubmit) {
+                if (playerId === 1 && duel.p1Lockout > 0) return;
+                if (playerId === 2 && duel.p2Lockout > 0) return;
+            }
+
+            if (optionIdx === duel.qData.correctIndex) {
+                duel.resolved = true;
+                sfx.playPointWin();
+
+                const winner = playerId === 1 ? duel.p1Entity : duel.p2Entity;
+                const loser = playerId === 1 ? duel.p2Entity : duel.p1Entity;
+                winner.score += 1;
+                updateHUD();
+
+                const banner = document.getElementById('duelResultBanner');
+                const title = document.getElementById('duelResultTitle');
+                const exp = document.getElementById('duelResultExplanation');
+
+                banner.className = winner.id === 1
+                    ? 'mt-5 rounded-2xl p-4 text-center border border-cyan-400 bg-cyan-500/20 font-orbitron'
+                    : 'mt-5 rounded-2xl p-4 text-center border border-rose-400 bg-rose-500/20 font-orbitron';
+                title.textContent = `${winner.name} GETS IT RIGHT! +1 POINT`;
+                exp.textContent = duel.qData.explanation;
+                banner.classList.remove('hidden');
+
+                setTimeout(() => {
+                    document.getElementById('mathDuelOverlay').classList.add('hidden');
+                    if (winner.score >= WIN_SCORE) {
+                        endMatch(winner);
+                    } else {
+                        respawnPlayerRandomly(loser, winner);
+                        winner.invulnTimer = 1.2;
+                        gameState.phase = 'PLAYING';
+                        showToast(`${loser.name} RESPAWNED AT RANDOM SECTOR!`, 'border-amber-400/80');
+                    }
+                }, 1650);
+            } else {
+                sfx.playWrong();
+                if (playerId === 1) {
+                    duel.p1Lockout = 1.6;
+                    document.getElementById('p1MathStatus').textContent = 'Wrong! Locked 1.6s...';
+                } else if (!isCpuSubmit) {
+                    duel.p2Lockout = 1.6;
+                    document.getElementById('p2MathStatus').textContent = 'Wrong! Locked 1.6s...';
+                }
+            }
+        }
+
+        // ==========================================
+        // 7B. SIDE-SPECIFIC SPLIT-SCREEN DUEL (Hit Player Only in 2P)
+        // ==========================================
+        function triggerSideMathDuel(hitPlayer, shooter) {
+            const sideId = hitPlayer.id;
+            if (gameState.sideDuels[sideId]) return;
+
+            sfx.playHitAlert();
+            gameState.isSplitScreen = true;
+            updateHUD();
+
+            const [p1, p2] = gameState.players;
+            const qData = MathDuelGenerator.generate(p1.score + p2.score);
+            const cfg = CPU_CONFIGS[gameState.difficulty];
+            const cpuDelay = cfg.mathMinTime + Math.random() * (cfg.mathMaxTime - cfg.mathMinTime);
+            const cpuCorrect = Math.random() < cfg.mathAccuracy;
+
+            gameState.sideDuels[sideId] = {
+                human: hitPlayer,
+                cpu: shooter,
+                qData,
+                resolved: false,
+                lockout: 0,
+                cpuTimer: 0,
+                cpuTargetDelay: cpuDelay,
+                cpuWillBeCorrect: cpuCorrect
+            };
+
+            const prefix = sideId === 1 ? 'p1Side' : 'p2Side';
+            const keysList = sideId === 1 ? ['1', '2', '3', '4'] : ['7', '8', '9', '0'];
+
+            const badgeEl = document.querySelector(`#${prefix}MathOverlay span`);
+            if (badgeEl) badgeEl.textContent = `⚡ P${sideId} HIT BY ${shooter.name}!`;
+
+            document.getElementById(`${prefix}MathQuestion`).textContent = qData.question;
+            document.getElementById(`${prefix}Status`).textContent = sideId === 1 ? 'Keys [1 - 4]' : 'Keys [7 - 0]';
+            document.getElementById(`${prefix}CpuStatus`).textContent = `${shooter.name} locking in...`;
+            document.getElementById(`${prefix}ResultBanner`).classList.add('hidden');
+
+            const grid = document.getElementById(`${prefix}OptionsGrid`);
+            grid.innerHTML = '';
+            qData.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = sideId === 1
+                    ? 'btn-glow rounded-lg p-2.5 bg-slate-900/90 hover:bg-cyan-500/25 border border-cyan-500/50 text-white font-orbitron text-xs sm:text-sm font-bold flex items-center justify-between'
+                    : 'btn-glow rounded-lg p-2.5 bg-slate-900/90 hover:bg-rose-500/25 border border-rose-500/50 text-white font-orbitron text-xs sm:text-sm font-bold flex items-center justify-between';
+                btn.innerHTML = `<span class="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">${keysList[idx]}</span><span>${opt}</span>`;
+                btn.onclick = () => submitSideDuelAnswer(sideId, idx);
+                grid.appendChild(btn);
+            });
+
+            document.getElementById(`${prefix}MathOverlay`).classList.remove('hidden');
+        }
+
+        function submitSideDuelAnswer(sideId, optionIdx, isCpuSubmit = false) {
+            const sd = gameState.sideDuels[sideId];
+            if (!sd || sd.resolved) return;
+
+            if (!isCpuSubmit && sd.lockout > 0) return;
+
+            const prefix = sideId === 1 ? 'p1Side' : 'p2Side';
+
+            if (optionIdx === sd.qData.correctIndex) {
+                sd.resolved = true;
+                const banner = document.getElementById(`${prefix}ResultBanner`);
+                const title = document.getElementById(`${prefix}ResultTitle`);
+                const exp = document.getElementById(`${prefix}ResultExp`);
+                banner.classList.remove('hidden');
+
+                if (!isCpuSubmit) {
+                    sfx.playPointWin();
+                    sd.human.score += 1;
+                    updateHUD();
+                    banner.className = 'mt-3 rounded-xl p-2.5 text-center border border-emerald-400 bg-emerald-500/20 font-orbitron text-xs';
+                    title.textContent = `${sd.human.name} ESCAPED! +1 POINT`;
+                    exp.textContent = sd.qData.explanation;
+                } else {
+                    sfx.playWrong();
+                    if (!sd.cpu.isCpu) {
+                        sd.cpu.score += 1;
+                        updateHUD();
+                    }
+                    banner.className = 'mt-3 rounded-xl p-2.5 text-center border border-rose-400 bg-rose-500/20 font-orbitron text-xs';
+                    title.textContent = `${sd.cpu.name} TAGGED YOU! RESPAWNING...`;
+                    exp.textContent = sd.qData.explanation;
+                }
+
+                setTimeout(() => {
+                    document.getElementById(`${prefix}MathOverlay`).classList.add('hidden');
+                    gameState.sideDuels[sideId] = null;
+
+                    if (!isCpuSubmit) {
+                        if (sd.cpu.isCpu) {
+                            respawnPlayerRandomly(sd.cpu, sd.human);
+                        }
+                        sd.human.invulnTimer = 1.5;
+                        if (sd.human.score >= WIN_SCORE && gameState.phase !== 'VICTORY') {
+                            endMatch(sd.human);
+                        }
+                    } else {
+                        respawnPlayerRandomly(sd.human, sd.cpu);
+                        sd.human.invulnTimer = 2.0;
+                        if (!sd.cpu.isCpu && sd.cpu.score >= WIN_SCORE && gameState.phase !== 'VICTORY') {
+                            endMatch(sd.cpu);
+                        }
+                    }
+                }, 1500);
+            } else if (!isCpuSubmit) {
+                sfx.playWrong();
+                sd.lockout = 1.5;
+                document.getElementById(`${prefix}Status`).textContent = 'Wrong! Locked 1.5s...';
+            }
+        }
+
+        function endMatch(winner) {
+            gameState.phase = 'VICTORY';
+            gameState.sideDuels = { 1: null, 2: null };
+            document.getElementById('p1SideMathOverlay').classList.add('hidden');
+            document.getElementById('p2SideMathOverlay').classList.add('hidden');
+            const [p1, p2] = gameState.players;
+            document.getElementById('winnerHeadline').textContent = `${winner.name} WINS!`;
+            document.getElementById('winnerHeadline').className = winner.id === 1
+                ? 'font-orbitron text-3xl sm:text-5xl font-black text-white neon-text-cyan mb-2'
+                : 'font-orbitron text-3xl sm:text-5xl font-black text-white neon-text-pink mb-2';
+            document.getElementById('winnerSubtext').textContent = winner.id === 1
+                ? 'Mastered Capture The Flag and Arithmetic Duels to claim victory!'
+                : `${winner.name} reached 7 points first! Ready for a rematch?`;
+            document.getElementById('finalP1Name').textContent = p1.name;
+            document.getElementById('finalP1Score').textContent = p1.score;
+            document.getElementById('finalP2Name').textContent = gameState.mode === 'cpu' ? 'CPU SQUAD' : p2.name;
+            document.getElementById('finalP2Score').textContent = gameState.mode === 'cpu'
+                ? Math.max(...gameState.players.filter(pl => pl.isCpu).map(pl => pl.score))
+                : p2.score;
+            document.getElementById('victoryOverlay').classList.remove('hidden');
+        }
+
+        // ==========================================
+        // 8. SIMULATION, CTF MECHANICS & AI UPDATE
+        // ==========================================
+        function updatePlaying(dt) {
+            const [p1, p2] = gameState.players;
+
+            // Update side-screen math duels in Local 2P
+            for (const sideId of [1, 2]) {
+                const sd = gameState.sideDuels[sideId];
+                if (sd && !sd.resolved) {
+                    const prefix = sideId === 1 ? 'p1Side' : 'p2Side';
+                    if (sd.lockout > 0) {
+                        sd.lockout -= dt;
+                        if (sd.lockout <= 0) {
+                            document.getElementById(`${prefix}Status`).textContent = sideId === 1 ? 'Keys [1 - 4]' : 'Keys [7 - 0]';
+                        }
+                    }
+                    sd.cpuTimer += dt;
+                    if (sd.cpuTimer >= sd.cpuTargetDelay) {
+                        if (sd.cpuWillBeCorrect) {
+                            submitSideDuelAnswer(sideId, sd.qData.correctIndex, true);
+                        } else {
+                            sd.cpuTimer = 0;
+                            sd.cpuTargetDelay = 2.4;
+                            sd.cpuWillBeCorrect = true;
+                        }
+                    }
+                }
+            }
+
+            // Powerup spawn timer
+            gameState.powerupSpawnTimer -= dt;
+            if (gameState.powerupSpawnTimer <= 0) {
+                spawnPowerup();
+                gameState.powerupSpawnTimer = 5.0;
+            }
+
+            // Update timers for all players
+            let hudDirty = false;
+            for (const pl of gameState.players) {
+                if (pl.fireTimer > 0) pl.fireTimer -= dt;
+                if (pl.invulnTimer > 0) pl.invulnTimer -= dt;
+                if (pl.speedBoostTimer > 0) {
+                    pl.speedBoostTimer = Math.max(0, pl.speedBoostTimer - dt);
+                    hudDirty = true;
+                }
+                if (pl.rapidFireTimer > 0) {
+                    pl.rapidFireTimer = Math.max(0, pl.rapidFireTimer - dt);
+                    hudDirty = true;
+                }
+                if (pl.locatorTimer > 0) {
+                    pl.locatorTimer = Math.max(0, pl.locatorTimer - dt);
+                    hudDirty = true;
+                }
+            }
+            if (hudDirty) updateHUD();
+
+            if (gameState.mode === 'local') {
+                const turnSpeed = 3.6;
+
+                // Player 1: A/D rotate, W/S move forward/backward
+                if (!gameState.sideDuels[1]) {
+                    let rot1 = 0;
+                    if (keys['KeyA']) rot1 -= 1;
+                    if (keys['KeyD']) rot1 += 1;
+                    p1.angle += rot1 * turnSpeed * dt;
+
+                    let thrust1 = 0;
+                    if (keys['KeyW']) thrust1 += 1;
+                    if (keys['KeyS']) thrust1 -= 0.7;
+                    const carrierPenalty1 = gameState.flag.carrierId === p1.id ? 0.92 : 1.0;
+                    const spd1 = p1.baseSpeed * carrierPenalty1 * (p1.speedBoostTimer > 0 ? 1.45 : 1);
+                    p1.x += Math.cos(p1.angle) * thrust1 * spd1 * dt;
+                    p1.y += Math.sin(p1.angle) * thrust1 * spd1 * dt;
+                    resolveWallCollisions(p1);
+
+                    if (keys['ShiftLeft'] || keys['Space']) {
+                        fireLaser(p1);
+                    }
+                }
+
+                // Player 2: Left/Right rotate, Up/Down move forward/backward
+                if (!gameState.sideDuels[2]) {
+                    let rot2 = 0;
+                    if (keys['ArrowLeft']) rot2 -= 1;
+                    if (keys['ArrowRight']) rot2 += 1;
+                    p2.angle += rot2 * turnSpeed * dt;
+
+                    let thrust2 = 0;
+                    if (keys['ArrowUp']) thrust2 += 1;
+                    if (keys['ArrowDown']) thrust2 -= 0.7;
+                    const carrierPenalty2 = gameState.flag.carrierId === p2.id ? 0.92 : 1.0;
+                    const spd2 = p2.baseSpeed * carrierPenalty2 * (p2.speedBoostTimer > 0 ? 1.45 : 1);
+                    p2.x += Math.cos(p2.angle) * thrust2 * spd2 * dt;
+                    p2.y += Math.sin(p2.angle) * thrust2 * spd2 * dt;
+                    resolveWallCollisions(p2);
+
+                    if (keys['ShiftRight'] || keys['Enter']) {
+                        fireLaser(p2);
+                    }
+                }
+
+                for (const pl of gameState.players) {
+                    if (pl.isCpu) updateCpuBot(pl, dt);
+                }
+            } else {
+                // 1P vs 3 CPUs: WASD movement + Cursor aiming
+                let mx1 = 0, my1 = 0;
+                if (keys['KeyW']) my1 -= 1;
+                if (keys['KeyS']) my1 += 1;
+                if (keys['KeyA']) mx1 -= 1;
+                if (keys['KeyD']) mx1 += 1;
+                if (mx1 !== 0 || my1 !== 0) {
+                    const len = Math.hypot(mx1, my1);
+                    mx1 /= len;
+                    my1 /= len;
+                }
+                const carrierPenalty1 = gameState.flag.carrierId === p1.id ? 0.92 : 1.0;
+                const spd1 = p1.baseSpeed * carrierPenalty1 * (p1.speedBoostTimer > 0 ? 1.45 : 1);
+                p1.x += mx1 * spd1 * dt;
+                p1.y += my1 * spd1 * dt;
+                resolveWallCollisions(p1);
+
+                const p1CamX = gameState.isSplitScreen ? p1.camX : gameState.sharedCam.x;
+                const p1CamY = gameState.isSplitScreen ? p1.camY : gameState.sharedCam.y;
+                const p1VpCenterX = gameState.isSplitScreen ? viewW * 0.25 : viewW * 0.5;
+                const p1VpCenterY = viewH * 0.5;
+                const worldMouseX = p1CamX + (mouse.x - p1VpCenterX);
+                const worldMouseY = p1CamY + (mouse.y - p1VpCenterY);
+                p1.angle = Math.atan2(worldMouseY - p1.y, worldMouseX - p1.x);
+
+                if (mouse.down || keys['Space'] || keys['ShiftLeft']) {
+                    fireLaser(p1);
+                }
+
+                for (const pl of gameState.players) {
+                    if (pl.isCpu) updateCpuBot(pl, dt);
+                }
+            }
+
+            // ==========================================
+            // CAPTURE THE FLAG PICKUP, CARRY & BASE DELIVERY
+            // ==========================================
+            gameState.flag.pulse += dt * 4.5;
+            if (gameState.flag.carrierId === null) {
+                // Flag is on the ground — check if any free player touches it to pick it up
+                for (const pl of gameState.players) {
+                    if (gameState.sideDuels[pl.id]) continue;
+                    if (Math.hypot(pl.x - gameState.flag.x, pl.y - gameState.flag.y) < pl.radius + 26) {
+                        gameState.flag.carrierId = pl.id;
+                        sfx.playFlagPickup();
+                        spawnParticles(gameState.flag.x, gameState.flag.y, '#facc15', 26, 220);
+                        updateHUD();
+                        showToast(`🚩 ${pl.name} CAPTURED THE FLAG! RACE TO ${pl.baseName}!`, 'border-yellow-400/90');
+                        break;
+                    }
+                }
+            } else {
+                // Flag is being carried — keep its coordinates synced to the carrier
+                const carrier = gameState.players.find(pl => pl.id === gameState.flag.carrierId);
+                if (carrier) {
+                    gameState.flag.x = carrier.x;
+                    gameState.flag.y = carrier.y;
+
+                    // Check if carrier reached their own corner base!
+                    if (Math.hypot(carrier.x - carrier.baseX, carrier.y - carrier.baseY) < 95) {
+                        carrier.score += 1;
+                        sfx.playPointWin();
+                        spawnParticles(carrier.baseX, carrier.baseY, '#facc15', 45, 340);
+                        spawnParticles(carrier.baseX, carrier.baseY, carrier.color, 35, 280);
+                        updateHUD();
+
+                        if (carrier.score >= WIN_SCORE) {
+                            endMatch(carrier);
+                            return;
+                        } else {
+                            showToast(`🏆 ${carrier.name} DELIVERED THE FLAG! +1 POINT!`, 'border-emerald-400/90');
+                            spawnFlagInCenter();
+                            updateHUD();
+                        }
+                    }
+                } else {
+                    gameState.flag.carrierId = null;
+                }
+            }
+
+            // Powerup pickups
+            for (let i = gameState.powerups.length - 1; i >= 0; i--) {
+                const pu = gameState.powerups[i];
+                pu.pulse += dt * 4;
+                for (const pl of gameState.players) {
+                    if (gameState.sideDuels[pl.id]) continue;
+                    if (Math.hypot(pl.x - pu.x, pl.y - pu.y) < pl.radius + pu.radius) {
+                        sfx.playPowerup();
+                        if (pu.type === 'speed') {
+                            pl.speedBoostTimer = 8.0;
+                            spawnParticles(pu.x, pu.y, '#10b981', 18, 200);
+                            if (!pl.isCpu) showToast(`${pl.name}: SPEED BOOST ACTIVE!`, 'border-emerald-400/80');
+                        } else if (pu.type === 'rapid') {
+                            pl.rapidFireTimer = 8.0;
+                            spawnParticles(pu.x, pu.y, '#f59e0b', 18, 200);
+                            if (!pl.isCpu) showToast(`${pl.name}: RAPID FIRE ACTIVE!`, 'border-amber-400/80');
+                        } else {
+                            pl.locatorTimer = 12.0;
+                            spawnParticles(pu.x, pu.y, '#2dd4bf', 20, 220);
+                            if (!pl.isCpu) showToast(`${pl.name}: 📡 RADAR LOCATOR ONLINE (12s)!`, 'border-teal-400/80');
+                        }
+                        gameState.powerups.splice(i, 1);
+                        updateHUD();
+                        break;
+                    }
+                }
+            }
+
+            // Update Lasers & Check Hits
+            for (let i = gameState.lasers.length - 1; i >= 0; i--) {
+                const l = gameState.lasers[i];
+                l.x += l.vx * dt;
+                l.y += l.vy * dt;
+                l.life -= dt;
+
+                if (l.life <= 0) {
+                    gameState.lasers.splice(i, 1);
+                    continue;
+                }
+
+                let hitWall = false;
+                for (const w of ARENA_WALLS) {
+                    if (l.x >= w.x && l.x <= w.x + w.w && l.y >= w.y && l.y <= w.y + w.h) {
+                        hitWall = true;
+                        break;
+                    }
+                }
+                if (hitWall) {
+                    spawnParticles(l.x, l.y, l.color, 8, 150);
+                    gameState.lasers.splice(i, 1);
+                    continue;
+                }
+
+                const shooter = gameState.players.find(p => p.id === l.ownerId);
+                for (const target of gameState.players) {
+                    if (target.id === l.ownerId || target.invulnTimer > 0) continue;
+                    if (shooter && shooter.isCpu && target.isCpu) continue;
+                    if (gameState.sideDuels[target.id]) continue;
+
+                    if (Math.hypot(l.x - target.x, l.y - target.y) < target.radius + 6) {
+                        spawnParticles(target.x, target.y, shooter.color, 28, 300);
+                        gameState.lasers.splice(i, 1);
+                        triggerMathDuel(shooter, target);
+                        if (gameState.phase === 'MATH_DUEL') return;
+                        break;
+                    }
+                }
+            }
+
+            // Update Particles
+            for (let i = gameState.particles.length - 1; i >= 0; i--) {
+                const pt = gameState.particles[i];
+                pt.x += pt.vx * dt;
+                pt.y += pt.vy * dt;
+                pt.vx *= 0.94;
+                pt.vy *= 0.94;
+                pt.life -= dt;
+                if (pt.life <= 0) gameState.particles.splice(i, 1);
+            }
+
+            // Update Camera & Dynamic Split-Screen
+            const clampCam = (cx, cy, vpW, vpH) => ({
+                x: Math.max(vpW / 2, Math.min(WORLD_W - vpW / 2, cx)),
+                y: Math.max(vpH / 2, Math.min(WORLD_H - vpH / 2, cy))
+            });
+
+            if (gameState.mode === 'cpu') {
+                gameState.isSplitScreen = false;
+                const targetCam = clampCam(p1.x, p1.y, viewW, viewH);
+                gameState.sharedCam.x += (targetCam.x - gameState.sharedCam.x) * Math.min(1, 12 * dt);
+                gameState.sharedCam.y += (targetCam.y - gameState.sharedCam.y) * Math.min(1, 12 * dt);
+            } else {
+                const dx = Math.abs(p1.x - p2.x);
+                const dy = Math.abs(p1.y - p2.y);
+                const anySideDuel = Boolean(gameState.sideDuels[1] || gameState.sideDuels[2]);
+                const shouldSplit = anySideDuel || dx > viewW * 0.72 || dy > viewH * 0.72;
+                if (shouldSplit !== gameState.isSplitScreen) {
+                    gameState.isSplitScreen = shouldSplit;
+                    updateHUD();
+                }
+
+                const midX = (p1.x + p2.x) / 2;
+                const midY = (p1.y + p2.y) / 2;
+                const sc = clampCam(midX, midY, viewW, viewH);
+                gameState.sharedCam.x += (sc.x - gameState.sharedCam.x) * Math.min(1, 10 * dt);
+                gameState.sharedCam.y += (sc.y - gameState.sharedCam.y) * Math.min(1, 10 * dt);
+
+                const c1 = clampCam(p1.x, p1.y, viewW * 0.5, viewH);
+                p1.camX += (c1.x - p1.camX) * Math.min(1, 10 * dt);
+                p1.camY += (c1.y - p1.camY) * Math.min(1, 10 * dt);
+
+                const c2 = clampCam(p2.x, p2.y, viewW * 0.5, viewH);
+                p2.camX += (c2.x - p2.camX) * Math.min(1, 10 * dt);
+                p2.camY += (c2.y - p2.camY) * Math.min(1, 10 * dt);
+            }
+        }
+
+        function updateCpuBot(bot, dt) {
+            const cfg = CPU_CONFIGS[gameState.difficulty];
+            const ai = bot.aiState;
+
+            const humanTargets = gameState.players.filter(p => !p.isCpu && !gameState.sideDuels[p.id]);
+            if (humanTargets.length === 0) return;
+
+            let nearestHuman = humanTargets[0];
+            let bestDist = Math.hypot(nearestHuman.x - bot.x, nearestHuman.y - bot.y);
+            for (let i = 1; i < humanTargets.length; i++) {
+                const d = Math.hypot(humanTargets[i].x - bot.x, humanTargets[i].y - bot.y);
+                if (d < bestDist) {
+                    bestDist = d;
+                    nearestHuman = humanTargets[i];
+                }
+            }
+
+            // If a human is carrying the flag, prioritize intercepting the flag carrier!
+            const flagCarrier = gameState.flag.carrierId !== null
+                ? gameState.players.find(p => p.id === gameState.flag.carrierId && !p.isCpu && !gameState.sideDuels[p.id])
+                : null;
+            const combatTarget = flagCarrier || nearestHuman;
+            const distToTarget = Math.hypot(combatTarget.x - bot.x, combatTarget.y - bot.y);
+            const los = hasLineOfSight(bot.x, bot.y, combatTarget.x, combatTarget.y);
+
+            ai.repathTimer -= dt;
+            ai.strafeTimer -= dt;
+            if (ai.strafeTimer <= 0) {
+                ai.strafeDir *= -1;
+                ai.strafeTimer = 0.8 + Math.random() * 1.1;
+            }
+
+            if (ai.repathTimer <= 0) {
+                ai.repathTimer = 0.6;
+                if (gameState.flag.carrierId === bot.id) {
+                    // Bot has the flag — sprint to its own corner base!
+                    ai.targetX = bot.baseX;
+                    ai.targetY = bot.baseY;
+                } else if (gameState.flag.carrierId === null && Math.hypot(gameState.flag.x - bot.x, gameState.flag.y - bot.y) < 1100) {
+                    // Flag is loose nearby — move to capture it!
+                    ai.targetX = gameState.flag.x;
+                    ai.targetY = gameState.flag.y;
+                } else {
+                    // Hunt human flag carrier or nearest human
+                    ai.targetX = combatTarget.x + (Math.random() - 0.5) * 280;
+                    ai.targetY = combatTarget.y + (Math.random() - 0.5) * 280;
+                }
+            }
+
+            let moveX = 0, moveY = 0;
+            if (gameState.flag.carrierId !== bot.id && los && distToTarget < 580) {
+                const toEnemyAng = Math.atan2(combatTarget.y - bot.y, combatTarget.x - bot.x);
+                const strafeAng = toEnemyAng + (Math.PI / 2) * ai.strafeDir;
+                moveX = Math.cos(strafeAng);
+                moveY = Math.sin(strafeAng);
+                if (distToTarget < 240) {
+                    moveX -= Math.cos(toEnemyAng) * 0.6;
+                    moveY -= Math.sin(toEnemyAng) * 0.6;
+                }
+            } else {
+                const ang = Math.atan2(ai.targetY - bot.y, ai.targetX - bot.x);
+                moveX = Math.cos(ang);
+                moveY = Math.sin(ang);
+            }
+
+            const mLen = Math.hypot(moveX, moveY) || 1;
+            const carrierPenalty = gameState.flag.carrierId === bot.id ? 0.92 : 1.0;
+            const spd = bot.baseSpeed * cfg.speedMult * carrierPenalty * (bot.speedBoostTimer > 0 ? 1.45 : 1);
+            bot.x += (moveX / mLen) * spd * dt;
+            bot.y += (moveY / mLen) * spd * dt;
+            resolveWallCollisions(bot);
+
+            if (los && distToTarget < 880) {
+                ai.sightTimer += dt;
+                const aimAng = Math.atan2(combatTarget.y - bot.y, combatTarget.x - bot.x);
+                bot.angle = aimAng;
+                if (ai.sightTimer >= cfg.reactionDelay && bot.fireTimer <= 0) {
+                    const spread = (Math.random() - 0.5) * cfg.aimSpread;
+                    bot.angle = aimAng + spread;
+                    fireLaser(bot);
+                    bot.fireTimer = Math.max(bot.fireTimer, cfg.fireCooldown * (bot.rapidFireTimer > 0 ? 0.55 : 1));
+                }
+            } else {
+                ai.sightTimer = 0;
+                bot.angle = Math.atan2(moveY, moveX);
+            }
+        }
+
+        // ==========================================
+        // 9. RENDERING (World, Bases, Flag, Split-Screen & Mini-Map)
+        // ==========================================
+        function renderWorldViewport(camX, camY, vpX, vpY, vpW, vpH, viewerPlayer) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(vpX, vpY, vpW, vpH);
+            ctx.clip();
+
+            ctx.fillStyle = '#060b19';
+            ctx.fillRect(vpX, vpY, vpW, vpH);
+
+            const offsetX = vpX + vpW / 2 - camX;
+            const offsetY = vpY + vpH / 2 - camY;
+            ctx.translate(offsetX, offsetY);
+
+            // Tactical Floor Grid
+            const gridSize = 80;
+            const startX = Math.floor((camX - vpW / 2) / gridSize) * gridSize;
+            const endX = camX + vpW / 2 + gridSize;
+            const startY = Math.floor((camY - vpH / 2) / gridSize) * gridSize;
+            const endY = camY + vpH / 2 + gridSize;
+
+            ctx.strokeStyle = 'rgba(30, 58, 138, 0.24)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let gx = Math.max(0, startX); gx <= Math.min(WORLD_W, endX); gx += gridSize) {
+                ctx.moveTo(gx, Math.max(0, startY));
+                ctx.lineTo(gx, Math.min(WORLD_H, endY));
+            }
+            for (let gy = Math.max(0, startY); gy <= Math.min(WORLD_H, endY); gy += gridSize) {
+                ctx.moveTo(Math.max(0, startX), gy);
+                ctx.lineTo(Math.min(WORLD_W, endX), gy);
+            }
+            ctx.stroke();
+
+            // Central Flag Courtyard Ring
+            ctx.save();
+            ctx.strokeStyle = 'rgba(250, 204, 21, 0.25)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([14, 10]);
+            ctx.beginPath();
+            ctx.arc(WORLD_W / 2, WORLD_H / 2, 380, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(250, 204, 21, 0.14)';
+            ctx.font = 'bold 14px Orbitron, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('CENTRAL FLAG SECTOR', WORLD_W / 2, WORLD_H / 2 - 395);
+            ctx.restore();
+
+            // Corner Capture Bases
+            for (const b of CORNER_BASES) {
+                const isOwnBase = viewerPlayer && viewerPlayer.baseX === b.x && viewerPlayer.baseY === b.y;
+                ctx.save();
+                ctx.fillStyle = b.color + (isOwnBase ? '26' : '12');
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = b.color;
+                ctx.lineWidth = isOwnBase ? 4 : 2;
+                ctx.setLineDash([10, 6]);
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.fillStyle = b.color;
+                ctx.font = 'bold 12px Orbitron, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(isOwnBase ? `★ YOUR BASE (${b.name})` : b.name, b.x, b.y + b.radius + 20);
+                ctx.restore();
+            }
+
+            // Powerups
+            for (const pu of gameState.powerups) {
+                const bob = Math.sin(pu.pulse) * 4;
+                const color = pu.type === 'speed' ? '#10b981' : (pu.type === 'rapid' ? '#f59e0b' : '#2dd4bf');
+                const icon = pu.type === 'speed' ? '⚡' : (pu.type === 'rapid' ? '🔥' : '📡');
+
+                ctx.save();
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 18;
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(pu.x, pu.y + bob, pu.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.shadowBlur = 0;
+                ctx.font = '18px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(icon, pu.x, pu.y + bob + 1);
+                ctx.restore();
+            }
+
+            // Arena Walls
+            for (const w of ARENA_WALLS) {
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(w.x, w.y, w.w, w.h);
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(w.x + 1, w.y + 1, w.w - 2, w.h - 2);
+            }
+
+            // Lasers
+            for (const l of gameState.lasers) {
+                ctx.save();
+                ctx.strokeStyle = l.color;
+                ctx.shadowColor = l.color;
+                ctx.shadowBlur = 14;
+                ctx.lineWidth = 4.5;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(l.x, l.y);
+                ctx.lineTo(l.x - l.vx * 0.032, l.y - l.vy * 0.032);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Players & CPU Hunters
+            for (const p of gameState.players) {
+                ctx.save();
+
+                if (p.invulnTimer > 0 && Math.floor(p.invulnTimer * 12) % 2 === 0) {
+                    ctx.globalAlpha = 0.45;
+                }
+
+                // Golden Aura if carrying the flag!
+                if (gameState.flag.carrierId === p.id) {
+                    ctx.strokeStyle = '#facc15';
+                    ctx.lineWidth = 3.5;
+                    ctx.shadowColor = '#facc15';
+                    ctx.shadowBlur = 18;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius + 13, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+
+                // Buff Rings
+                if (p.speedBoostTimer > 0) {
+                    ctx.strokeStyle = '#10b981';
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius + 8, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                if (p.rapidFireTimer > 0) {
+                    ctx.strokeStyle = '#f59e0b';
+                    ctx.lineWidth = 2.5;
+                    ctx.setLineDash([6, 4]);
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius + 11, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                // Laser Blaster Barrel
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.angle);
+                ctx.fillStyle = '#e2e8f0';
+                ctx.strokeStyle = p.color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(6, -5, 24, 10, 3);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+
+                // Player Chassis
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 18;
+                ctx.fillStyle = '#0f172a';
+                ctx.strokeStyle = p.color;
+                ctx.lineWidth = 3.5;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#f8fafc';
+                ctx.font = 'bold 11px Orbitron, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(p.name, p.x, p.y - p.radius - 10);
+
+                // Compass Ring for Viewer:
+                // 1) Always points to the Flag (or to your Home Base when you are carrying the Flag!)
+                if (viewerPlayer && viewerPlayer.id === p.id) {
+                    const isCarrying = gameState.flag.carrierId === p.id;
+                    const navX = isCarrying ? p.baseX : gameState.flag.x;
+                    const navY = isCarrying ? p.baseY : gameState.flag.y;
+                    const navColor = isCarrying ? p.color : '#facc15';
+                    const navDist = Math.hypot(navX - p.x, navY - p.y);
+
+                    if (navDist > 85) {
+                        const navAng = Math.atan2(navY - p.y, navX - p.x);
+                        const ringDist = p.radius + 26;
+                        const ix = p.x + Math.cos(navAng) * ringDist;
+                        const iy = p.y + Math.sin(navAng) * ringDist;
+
+                        ctx.save();
+                        ctx.translate(ix, iy);
+                        ctx.rotate(navAng);
+                        ctx.fillStyle = navColor;
+                        ctx.shadowColor = navColor;
+                        ctx.shadowBlur = 12;
+                        ctx.beginPath();
+                        ctx.moveTo(11, 0);
+                        ctx.lineTo(-7, -7);
+                        ctx.lineTo(-3, 0);
+                        ctx.lineTo(-7, 7);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.restore();
+
+                        ctx.fillStyle = navColor;
+                        ctx.font = 'bold 10px Orbitron, sans-serif';
+                        ctx.fillText(
+                            `${isCarrying ? 'BASE' : 'FLAG'} ${Math.round(navDist / 25)}m`,
+                            p.x,
+                            p.y + p.radius + 20
+                        );
+                    }
+                }
+
+                // 2) Enemy Locator Directional Ring (ONLY when locator powerup is active!)
+                if (viewerPlayer && viewerPlayer.id === p.id && p.locatorTimer > 0) {
+                    const rivals = gameState.players.filter(other => other.id !== p.id);
+                    if (rivals.length > 0) {
+                        let nearestRival = rivals[0];
+                        let minDist = Math.hypot(nearestRival.x - p.x, nearestRival.y - p.y);
+                        for (let r = 1; r < rivals.length; r++) {
+                            const d = Math.hypot(rivals[r].x - p.x, rivals[r].y - p.y);
+                            if (d < minDist) {
+                                minDist = d;
+                                nearestRival = rivals[r];
+                            }
+                        }
+                        const angToEnemy = Math.atan2(nearestRival.y - p.y, nearestRival.x - p.x);
+                        const ringDist = p.radius + 36;
+                        const ix = p.x + Math.cos(angToEnemy) * ringDist;
+                        const iy = p.y + Math.sin(angToEnemy) * ringDist;
+
+                        ctx.save();
+                        ctx.translate(ix, iy);
+                        ctx.rotate(angToEnemy);
+                        ctx.fillStyle = '#10b981';
+                        ctx.shadowColor = '#10b981';
+                        ctx.shadowBlur = 12;
+                        ctx.beginPath();
+                        ctx.moveTo(9, 0);
+                        ctx.lineTo(-6, -6);
+                        ctx.lineTo(-2, 0);
+                        ctx.lineTo(-6, 6);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.restore();
+                    }
+                }
+
+                ctx.restore();
+            }
+
+            // Render The Golden Flag (either on ground or hovering above carrier)
+            {
+                const fx = gameState.flag.x;
+                const fy = gameState.flag.carrierId !== null ? gameState.flag.y - 30 : gameState.flag.y;
+                const bob = Math.sin(gameState.flag.pulse) * 4;
+
+                ctx.save();
+                if (gameState.flag.carrierId === null) {
+                    ctx.strokeStyle = 'rgba(250, 204, 21, 0.55)';
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.arc(fx, fy, 26 + bob * 0.7, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                ctx.shadowColor = '#facc15';
+                ctx.shadowBlur = 16;
+                // Flagpole
+                ctx.strokeStyle = '#fef08a';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(fx - 6, fy + 12 + bob);
+                ctx.lineTo(fx - 6, fy - 14 + bob);
+                ctx.stroke();
+
+                // Pennant
+                ctx.fillStyle = '#facc15';
+                ctx.beginPath();
+                ctx.moveTo(fx - 5, fy - 14 + bob);
+                ctx.lineTo(fx + 16, fy - 6 + bob);
+                ctx.lineTo(fx - 5, fy + 2 + bob);
+                ctx.closePath();
+                ctx.fill();
+
+                if (gameState.flag.carrierId === null) {
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = '#fde047';
+                    ctx.font = 'bold 11px Orbitron, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('🚩 FLAG', fx, fy + 32);
+                }
+                ctx.restore();
+            }
+
+            // Particles
+            for (const pt of gameState.particles) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+                ctx.fillStyle = pt.color;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            ctx.restore();
+        }
+
+        function renderMiniMap() {
+            const [p1, p2] = gameState.players;
+            if (!p1 || !p2) return;
+
+            const mapW = 168;
+            const mapH = 126;
+            const mx = (viewW - mapW) / 2;
+            const my = viewH - mapH - 12;
+            const scale = mapW / WORLD_W;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(8, 13, 30, 0.84)';
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(mx, my, mapW, mapH, 10);
+            ctx.fill();
+            ctx.stroke();
+
+            // Walls
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+            for (const w of ARENA_WALLS) {
+                ctx.fillRect(mx + w.x * scale, my + w.y * scale, Math.max(1, w.w * scale), Math.max(1, w.h * scale));
+            }
+
+            // Corner bases
+            for (const b of CORNER_BASES) {
+                ctx.fillStyle = b.color;
+                ctx.beginPath();
+                ctx.arc(mx + b.x * scale, my + b.y * scale, 4.2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Golden Flag blip (always visible on tactical radar!)
+            ctx.fillStyle = '#facc15';
+            ctx.beginPath();
+            ctx.arc(mx + gameState.flag.x * scale, my + gameState.flag.y * scale, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Player 1 dot
+            ctx.fillStyle = p1.color;
+            ctx.beginPath();
+            ctx.arc(mx + p1.x * scale, my + p1.y * scale, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Other players & CPU hunters (visible in 2P or when Enemy Locator is active)
+            for (let i = 1; i < gameState.players.length; i++) {
+                const other = gameState.players[i];
+                const isVisible = (!other.isCpu && gameState.mode === 'local') || p1.locatorTimer > 0 || (p2 && !p2.isCpu && p2.locatorTimer > 0);
+                if (isVisible) {
+                    ctx.fillStyle = other.color;
+                    ctx.beginPath();
+                    ctx.arc(mx + other.x * scale, my + other.y * scale, 3.2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            ctx.restore();
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, viewW, viewH);
+
+            if (gameState.phase === 'MENU') {
+                renderWorldViewport(WORLD_W / 2, WORLD_H / 2, 0, 0, viewW, viewH, null);
+                return;
+            }
+
+            const [p1, p2] = gameState.players;
+
+            if (gameState.isSplitScreen && gameState.mode === 'local') {
+                const halfW = viewW / 2;
+                renderWorldViewport(p1.camX, p1.camY, 0, 0, halfW, viewH, p1);
+                renderWorldViewport(p2.camX, p2.camY, halfW, 0, halfW, viewH, p2);
+
+                ctx.save();
+                ctx.strokeStyle = '#38bdf8';
+                ctx.shadowColor = '#38bdf8';
+                ctx.shadowBlur = 12;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(halfW, 0);
+                ctx.lineTo(halfW, viewH);
+                ctx.stroke();
+
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(8, 13, 30, 0.9)';
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.roundRect(halfW - 58, 66, 116, 22, 11);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#7dd3fc';
+                ctx.font = 'bold 10px Orbitron, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('SPLIT VIEW', halfW, 80);
+                ctx.restore();
+            } else {
+                renderWorldViewport(gameState.sharedCam.x, gameState.sharedCam.y, 0, 0, viewW, viewH, p1);
+            }
+
+            renderMiniMap();
+
+            // Custom Aim Reticle in 1P vs CPU mode
+            if (gameState.phase === 'PLAYING' && gameState.mode === 'cpu') {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(34, 211, 238, 0.85)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(mouse.x, mouse.y, 13, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(mouse.x - 19, mouse.y);
+                ctx.lineTo(mouse.x - 7, mouse.y);
+                ctx.moveTo(mouse.x + 7, mouse.y);
+                ctx.lineTo(mouse.x + 19, mouse.y);
+                ctx.moveTo(mouse.x, mouse.y - 19);
+                ctx.lineTo(mouse.x, mouse.y - 7);
+                ctx.moveTo(mouse.x, mouse.y + 7);
+                ctx.lineTo(mouse.x, mouse.y + 19);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        function returnToMainMenu() {
+            gameState.phase = 'MENU';
+            gameState.sideDuels = { 1: null, 2: null };
+            document.getElementById('hudOverlay').classList.add('hidden');
+            document.getElementById('controlsBar').classList.add('hidden');
+            document.getElementById('mathDuelOverlay').classList.add('hidden');
+            document.getElementById('p1SideMathOverlay').classList.add('hidden');
+            document.getElementById('p2SideMathOverlay').classList.add('hidden');
+            document.getElementById('victoryOverlay').classList.add('hidden');
+            document.getElementById('startMenu').classList.remove('hidden');
+        }
+
+        // ==========================================
+        // 10. MAIN ANIMATION LOOP
+        // ==========================================
+        function gameLoop(timestamp) {
+            if (!gameState.lastTime) gameState.lastTime = timestamp;
+            const dt = Math.min(0.05, (timestamp - gameState.lastTime) / 1000);
+            gameState.lastTime = timestamp;
+
+            if (gameState.phase === 'PLAYING') {
+                updatePlaying(dt);
+            } else if (gameState.phase === 'MATH_DUEL' && gameState.duel && !gameState.duel.resolved) {
+                const duel = gameState.duel;
+                if (duel.p1Lockout > 0) {
+                    duel.p1Lockout -= dt;
+                    if (duel.p1Lockout <= 0) {
+                        document.getElementById('p1MathStatus').textContent = 'Keys [1 - 4] or Click';
+                    }
+                }
+                if (duel.p2Lockout > 0) {
+                    duel.p2Lockout -= dt;
+                    if (duel.p2Lockout <= 0) {
+                        document.getElementById('p2MathStatus').textContent = 'Keys [7 - 0]';
+                    }
+                }
+
+                if (gameState.mode === 'cpu') {
+                    duel.cpuTimer += dt;
+                    if (duel.cpuTimer >= duel.cpuTargetDelay) {
+                        if (duel.cpuWillBeCorrect) {
+                            submitDuelAnswer(2, duel.qData.correctIndex, true);
+                        } else {
+                            document.getElementById('cpuThinkingText').textContent = 'CPU MISCALCULATED! RETRYING...';
+                            duel.cpuTimer = 0;
+                            duel.cpuTargetDelay = 2.6;
+                            duel.cpuWillBeCorrect = true;
+                        }
+                    }
+                }
+            }
+
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.onload = function () {
+            selectGameMode('cpu');
+            selectDifficulty('medium');
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
